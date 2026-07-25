@@ -311,7 +311,7 @@
       <div class="hero-card-list">
         <a class="hero-card-row" href="#xu-ly-su-co"><span>🛠 Xử lý sự cố ClassIn / tài khoản</span><span class="pill orange">Đi tới</span></a>
         <a class="hero-card-row" href="#lich-hoc"><span>📅 Xem lịch học tuần này</span><span class="pill">Đi tới</span></a>
-        <a class="hero-card-row" href="#doi-ngu"><span>🎧 Liên hệ trợ giảng</span><span class="pill muted">Đi tới</span></a>
+        <a class="hero-card-row" href="#doi-ngu"><span>🎧 Liên hệ Quản Lý Lớp</span><span class="pill muted">Đi tới</span></a>
       </div>
     </div>
   </div>
@@ -719,7 +719,7 @@ function renderTeam(){
   const filterBar = document.getElementById('teamFilter');
   filterBar.innerHTML = `
     <button class="filter-btn ${teamFilterState==='tat_ca'?'active':''}" data-f="tat_ca">Tất cả</button>
-    <button class="filter-btn ${teamFilterState==='tro_giang'?'active':''}" data-f="tro_giang">Trợ giảng</button>`;
+    <button class="filter-btn ${teamFilterState==='tro_giang'?'active':''}" data-f="tro_giang">Quản Lý Lớp Phụ</button>`;
   filterBar.querySelectorAll('.filter-btn').forEach(btn=>{
     btn.onclick = ()=>{ teamFilterState = btn.dataset.f; renderTeam(); };
   });
