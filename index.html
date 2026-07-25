@@ -426,7 +426,7 @@ function sheetCsvUrl(tabName){
   // &_= là cache-buster: đổi mỗi lần tải trang để Google luôn trả bản dữ liệu mới nhất,
   // không bị dính cache cũ vài phút sau khi Sheet vừa được sửa.
   const bust = Date.now();
-  return `https://docs.google.com/spreadsheets/d/${CONFIG.SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tabName)}&_=${bust}`;
+  return `https://docs.google.com/spreadsheets/d/${CONFIG.SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tabName)}&headers=1&_=${bust}`;
 }
 
 /* Dữ liệu mẫu — chỉ dùng để demo khi CHƯA gắn Google Sheet thật,
@@ -542,21 +542,21 @@ function fetchTabOnce(tabName){
   return new Promise((resolve)=>{
     Papa.parse(sheetCsvUrl(tabName), {
       download:true, header:true, skipEmptyLines:true,
-      complete: (res)=> resolve(res.data && res.data.length ? res.data : null),
-      error: ()=> resolve(null)
+      complete: (res)=> resolve({ok:true, data: res.data || []}),
+      error: ()=> resolve({ok:false, data: null})
     });
   });
 }
 async function fetchTab(tabName){
-  if(!CONFIG.SHEET_ID || CONFIG.SHEET_ID.indexOf("DAN_SHEET_ID")===0) return null;
-  let data = await fetchTabOnce(tabName);
-  if(!data){
+  if(!CONFIG.SHEET_ID || CONFIG.SHEET_ID.indexOf("DAN_SHEET_ID")===0) return {ok:false, data:null, skipped:true};
+  let res = await fetchTabOnce(tabName);
+  if(!res.ok){
     // thử lại 1 lần sau 800ms nếu lần đầu lỗi — tránh việc mạng chập chờn/Google
     // giới hạn tốc độ khi 7 tab được gọi cùng lúc làm rớt 1 tab một cách âm thầm
     await new Promise(r=>setTimeout(r, 800));
-    data = await fetchTabOnce(tabName);
+    res = await fetchTabOnce(tabName);
   }
-  return data;
+  return res;
 }
 
 /* ================================================================
@@ -575,19 +575,23 @@ async function loadAll(){
       fetchTab(CONFIG.TABS.troGiang), fetchTab(CONFIG.TABS.video), fetchTab(CONFIG.TABS.taiLieu),
       fetchTab(CONFIG.TABS.hoTro),
     ]);
-    DATA.lop      = (lop      || SAMPLE_DATA.lop).filter(r=>truthy(r.hien_thi)).sort(sortByThuTu);
-    DATA.lopLink  = (lopLink  || SAMPLE_DATA.lopLink).filter(r=>truthy(r.hien_thi)).sort(sortByThuTu);
-    DATA.tkb      = (tkb      || SAMPLE_DATA.tkb);
-    DATA.troGiang = (troGiang || SAMPLE_DATA.troGiang).filter(r=>truthy(r.hien_thi)).sort(sortByThuTu);
-    DATA.video    = (video    || SAMPLE_DATA.video).filter(r=>truthy(r.hien_thi)).sort(sortByThuTu);
-    DATA.taiLieu  = (taiLieu  || SAMPLE_DATA.taiLieu).filter(r=>truthy(r.hien_thi)).sort(sortByThuTu);
-    DATA.hoTro    = (hoTro    || SAMPLE_DATA.hoTro).filter(r=>truthy(r.hien_thi));
+    // dùng dữ liệu mẫu khi: chưa cấu hình Sheet, HOẶC tải thật sự lỗi.
+    // Nếu tải THÀNH CÔNG nhưng tab đang trống (VD TaiLieu chưa ai điền) thì hiển thị
+    // đúng trạng thái RỖNG THẬT, không âm thầm thay bằng dữ liệu mẫu giả.
+    function pick(res, sampleArr){ return res.ok ? res.data : sampleArr; }
+    DATA.lop      = pick(lop, SAMPLE_DATA.lop).filter(r=>truthy(r.hien_thi)).sort(sortByThuTu);
+    DATA.lopLink  = pick(lopLink, SAMPLE_DATA.lopLink).filter(r=>truthy(r.hien_thi)).sort(sortByThuTu);
+    DATA.tkb      = pick(tkb, SAMPLE_DATA.tkb);
+    DATA.troGiang = pick(troGiang, SAMPLE_DATA.troGiang).filter(r=>truthy(r.hien_thi)).sort(sortByThuTu);
+    DATA.video    = pick(video, SAMPLE_DATA.video).filter(r=>truthy(r.hien_thi)).sort(sortByThuTu);
+    DATA.taiLieu  = pick(taiLieu, SAMPLE_DATA.taiLieu).filter(r=>truthy(r.hien_thi)).sort(sortByThuTu);
+    DATA.hoTro    = pick(hoTro, SAMPLE_DATA.hoTro).filter(r=>truthy(r.hien_thi));
 
     cleanMaLop(DATA.lop); cleanMaLop(DATA.lopLink); cleanMaLop(DATA.tkb);
 
     const notConfigured = !CONFIG.SHEET_ID || CONFIG.SHEET_ID.indexOf("DAN_SHEET_ID")===0;
     const tabResults = { Lop:lop, LopLink:lopLink, TKB:tkb, TroGiang:troGiang, Video:video, TaiLieu:taiLieu, HoTro:hoTro };
-    const failedTabs = Object.keys(tabResults).filter(k=>!tabResults[k]);
+    const failedTabs = Object.keys(tabResults).filter(k=>!tabResults[k].ok);
 
     if(notConfigured){
       syncDot.classList.remove('err');
