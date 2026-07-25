@@ -418,7 +418,7 @@
    Xem hướng dẫn đầy đủ trong file HUONG-DAN-SU-DUNG.md
 ================================================================= */
 const CONFIG = {
-  SHEET_ID: "1efJp4Jyk3nKE2b1-c7DLRsxoMBtIxLTgnXyfgkS0Ygk", // <-- thay bằng Sheet ID thật của bạn
+  SHEET_ID: "DAN_SHEET_ID_VAO_DAY", // <-- thay bằng Sheet ID thật của bạn
   TABS: { lop:"Lop", lopLink:"LopLink", tkb:"TKB", troGiang:"TroGiang", video:"Video", taiLieu:"TaiLieu", hoTro:"HoTro" }
 };
 
@@ -538,15 +538,25 @@ function toYoutubeEmbed(url){
   }catch(e){ return raw; }
 }
 
-function fetchTab(tabName){
+function fetchTabOnce(tabName){
   return new Promise((resolve)=>{
-    if(!CONFIG.SHEET_ID || CONFIG.SHEET_ID.indexOf("DAN_SHEET_ID")===0){ resolve(null); return; }
     Papa.parse(sheetCsvUrl(tabName), {
       download:true, header:true, skipEmptyLines:true,
       complete: (res)=> resolve(res.data && res.data.length ? res.data : null),
       error: ()=> resolve(null)
     });
   });
+}
+async function fetchTab(tabName){
+  if(!CONFIG.SHEET_ID || CONFIG.SHEET_ID.indexOf("DAN_SHEET_ID")===0) return null;
+  let data = await fetchTabOnce(tabName);
+  if(!data){
+    // thử lại 1 lần sau 800ms nếu lần đầu lỗi — tránh việc mạng chập chờn/Google
+    // giới hạn tốc độ khi 7 tab được gọi cùng lúc làm rớt 1 tab một cách âm thầm
+    await new Promise(r=>setTimeout(r, 800));
+    data = await fetchTabOnce(tabName);
+  }
+  return data;
 }
 
 /* ================================================================
@@ -575,11 +585,24 @@ async function loadAll(){
 
     cleanMaLop(DATA.lop); cleanMaLop(DATA.lopLink); cleanMaLop(DATA.tkb);
 
-    const usingSample = !lop && !lopLink && !tkb && !troGiang && !video && !taiLieu && !hoTro;
-    syncDot.classList.remove('err');
-    syncText.textContent = usingSample
-      ? "Đang hiển thị dữ liệu mẫu — điền Sheet ID trong index.html để dùng dữ liệu thật"
-      : "Đã đồng bộ dữ liệu từ Google Sheet";
+    const notConfigured = !CONFIG.SHEET_ID || CONFIG.SHEET_ID.indexOf("DAN_SHEET_ID")===0;
+    const tabResults = { Lop:lop, LopLink:lopLink, TKB:tkb, TroGiang:troGiang, Video:video, TaiLieu:taiLieu, HoTro:hoTro };
+    const failedTabs = Object.keys(tabResults).filter(k=>!tabResults[k]);
+
+    if(notConfigured){
+      syncDot.classList.remove('err');
+      syncText.textContent = "Đang hiển thị dữ liệu mẫu — điền Sheet ID trong index.html để dùng dữ liệu thật";
+    }else if(failedTabs.length===0){
+      syncDot.classList.remove('err');
+      syncText.textContent = "Đã đồng bộ dữ liệu từ Google Sheet";
+    }else if(failedTabs.length===Object.keys(tabResults).length){
+      syncDot.classList.add('err');
+      syncText.textContent = "Không tải được Google Sheet — đang hiển thị dữ liệu mẫu. Tải lại trang để thử lại.";
+    }else{
+      // chỉ một số tab lỗi — nói rõ đúng tab nào để không bị nhầm là lỗi dữ liệu
+      syncDot.classList.add('err');
+      syncText.textContent = `Lỗi tải tab: ${failedTabs.join(', ')} — các mục này đang tạm dùng dữ liệu mẫu. Tải lại trang để thử lại.`;
+    }
   }catch(e){
     Object.assign(DATA, SAMPLE_DATA);
     syncDot.classList.add('err');
