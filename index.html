@@ -504,6 +504,12 @@ function cleanMaLop(rows){
   rows.forEach(r=>{ if('ma_lop' in r) r.ma_lop = normId(r.ma_lop); });
   return rows;
 }
+/* So khớp mã lớp KHÔNG phân biệt hoa/thường, khoảng trắng, hay kiểu gạch ngang
+   (TH01 - 2K9 / TH01-2K9 / th01–2k9 đều được coi là cùng 1 lớp). Chỉ dùng để SO KHỚP,
+   không dùng để hiển thị — hiển thị vẫn lấy nguyên ma_lop gốc. */
+function classKey(v){
+  return normId(v).toLowerCase().replace(/\s+/g,'').replace(/[\u2010-\u2015]/g,'-');
+}
 function hasLink(v){ return !!(v && String(v).trim() && String(v).trim()!=="#"); }
 function sortByThuTu(a,b){ return (parseFloat(a.thu_tu)||0) - (parseFloat(b.thu_tu)||0); }
 function initials(name){ return (name||"?").trim().split(/\s+/).slice(-2).map(w=>w[0]).join("").toUpperCase(); }
@@ -692,9 +698,9 @@ function renderClassPicker(){
     document.getElementById('tkbEmpty').textContent = 'Chưa có lớp học nào.';
     return;
   }
-  if(!selectedClass || !DATA.lop.find(l=>l.ma_lop===selectedClass)){ selectedClass = DATA.lop[0].ma_lop; }
+  if(!selectedClass || !DATA.lop.find(l=>classKey(l.ma_lop)===selectedClass)){ selectedClass = classKey(DATA.lop[0].ma_lop); }
   grid.innerHTML = DATA.lop.map(l=>`
-    <button class="class-pick ${l.ma_lop===selectedClass?'selected':''}" data-lop="${l.ma_lop}">
+    <button class="class-pick ${classKey(l.ma_lop)===selectedClass?'selected':''}" data-lop="${classKey(l.ma_lop)}">
       <div class="check">✓</div>
       <h4>${l.ten_hien_thi||l.ma_lop}</h4>
       <p>${l.mo_ta_ngan||''}${l.khai_giang?(' · Khai giảng '+l.khai_giang):''}</p>
@@ -718,10 +724,10 @@ const THU_COLS = [
 function todayThuValue(){ const map = {0:8,1:2,2:3,3:4,4:5,5:6,6:7}; return map[new Date().getDay()]; }
 
 function renderClassDetail(){
-  const classObj = DATA.lop.find(l=>l.ma_lop===selectedClass);
+  const classObj = DATA.lop.find(l=>classKey(l.ma_lop)===selectedClass);
   document.getElementById('tkbTitle').textContent = classObj ? `Thông tin ${classObj.ten_hien_thi}` : 'Thông tin lớp';
 
-  const rows = DATA.tkb.filter(r=>r.ma_lop===selectedClass).sort(sortByThuTu);
+  const rows = DATA.tkb.filter(r=>classKey(r.ma_lop)===selectedClass).sort(sortByThuTu);
   const table = document.getElementById('tkbTable');
   const empty = document.getElementById('tkbEmpty');
   const today = todayThuValue();
@@ -761,7 +767,7 @@ function renderClassDetail(){
 function renderClassLinks(classObj){
   const wrap = document.getElementById('classLinkGroups');
   if(!classObj){ wrap.innerHTML=''; return; }
-  const rows = DATA.lopLink.filter(l => l.ma_lop===classObj.ma_lop || (l.ma_lop||'').toUpperCase()==='ALL');
+  const rows = DATA.lopLink.filter(l => classKey(l.ma_lop)===classKey(classObj.ma_lop) || (l.ma_lop||'').toUpperCase()==='ALL');
   if(!rows.length){ wrap.innerHTML=''; return; }
 
   // gộp theo nhóm, giữ thứ tự xuất hiện
