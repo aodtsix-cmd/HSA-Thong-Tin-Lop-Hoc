@@ -415,19 +415,37 @@
       Lop | LopLink | TKB | TroGiang | Video | TaiLieu | HoTro
    2. Share > General access > "Anyone with the link" > Viewer
    3. Copy Sheet ID trong URL (đoạn giữa /d/ và /edit) và dán vào bên dưới.
-   Xem hướng dẫn đầy đủ trong file HUONG-DAN-SU-DUNG.md
+   4. Lấy GID của TỪNG tab: bấm vào tab đó trong Sheet, nhìn cuối thanh địa chỉ
+      trình duyệt có dạng "...#gid=123456789" — copy đúng dãy số đó (không copy
+      chữ "gid=") và dán vào đúng tab tương ứng bên dưới.
+   Xem hướng dẫn đầy đủ (kèm ảnh minh hoạ cách lấy GID) trong file HUONG-DAN-SU-DUNG.md
 ================================================================= */
 const CONFIG = {
   SHEET_ID: "1efJp4Jyk3nKE2b1-c7DLRsxoMBtIxLTgnXyfgkS0Ygk", // <-- thay bằng Sheet ID thật của bạn
-  TABS: { lop:"Lop", lopLink:"LopLink", tkb:"TKB", troGiang:"TroGiang", video:"Video", taiLieu:"TaiLieu", hoTro:"HoTro" }
+  TABS: {
+    lop:      { name:"Lop",      gid:"1750173925" },
+    lopLink:  { name:"LopLink",  gid:"1195483655" },
+    tkb:      { name:"TKB",      gid:"622179452" },
+    troGiang: { name:"TroGiang", gid:"1424241370" },
+    video:    { name:"Video",    gid:"532708572" },
+    taiLieu:  { name:"TaiLieu",  gid:"1829529854" },
+    hoTro:    { name:"HoTro",    gid:"991767876" },
+  }
 };
 
-function sheetCsvUrl(tabName){
-  // &_= là cache-buster: đổi mỗi lần tải trang để Google luôn trả bản dữ liệu mới nhất,
-  // không bị dính cache cũ vài phút sau khi Sheet vừa được sửa.
+function sheetCsvUrl(tab){
+  // Dùng endpoint export CSV chính thức của Google Sheets (giống cơ chế "Tệp > Tải xuống > CSV")
+  // thay vì /gviz/tq — endpoint gviz có bug đã được Google Groups report nhiều năm nay:
+  // thỉnh thoảng tự trả về ô rỗng một cách ngẫu nhiên, không sửa được bằng tham số.
+  // &_= là cache-buster: đổi mỗi lần tải trang để không dính cache cũ sau khi Sheet vừa sửa.
   const bust = Date.now();
-  return `https://docs.google.com/spreadsheets/d/${CONFIG.SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tabName)}&headers=1&_=${bust}`;
+  return `https://docs.google.com/spreadsheets/d/${CONFIG.SHEET_ID}/export?format=csv&gid=${tab.gid}&_=${bust}`;
 }
+
+function tabConfigured(tab){
+  return tab && tab.gid && tab.gid.indexOf("DAN_GID")!==0;
+}
+
 
 /* Dữ liệu mẫu — chỉ dùng để demo khi CHƯA gắn Google Sheet thật,
    hoặc dùng tạm khi kết nối Sheet bị lỗi. */
@@ -538,23 +556,25 @@ function toYoutubeEmbed(url){
   }catch(e){ return raw; }
 }
 
-function fetchTabOnce(tabName){
+function fetchTabOnce(tab){
   return new Promise((resolve)=>{
-    Papa.parse(sheetCsvUrl(tabName), {
+    Papa.parse(sheetCsvUrl(tab), {
       download:true, header:true, skipEmptyLines:true,
       complete: (res)=> resolve({ok:true, data: res.data || []}),
       error: ()=> resolve({ok:false, data: null})
     });
   });
 }
-async function fetchTab(tabName){
-  if(!CONFIG.SHEET_ID || CONFIG.SHEET_ID.indexOf("DAN_SHEET_ID")===0) return {ok:false, data:null, skipped:true};
-  let res = await fetchTabOnce(tabName);
+async function fetchTab(tab){
+  if(!CONFIG.SHEET_ID || CONFIG.SHEET_ID.indexOf("DAN_SHEET_ID")===0 || !tabConfigured(tab)){
+    return {ok:false, data:null, skipped:true};
+  }
+  let res = await fetchTabOnce(tab);
   if(!res.ok){
     // thử lại 1 lần sau 800ms nếu lần đầu lỗi — tránh việc mạng chập chờn/Google
     // giới hạn tốc độ khi 7 tab được gọi cùng lúc làm rớt 1 tab một cách âm thầm
     await new Promise(r=>setTimeout(r, 800));
-    res = await fetchTabOnce(tabName);
+    res = await fetchTabOnce(tab);
   }
   return res;
 }
@@ -589,13 +609,14 @@ async function loadAll(){
 
     cleanMaLop(DATA.lop); cleanMaLop(DATA.lopLink); cleanMaLop(DATA.tkb);
 
-    const notConfigured = !CONFIG.SHEET_ID || CONFIG.SHEET_ID.indexOf("DAN_SHEET_ID")===0;
+    const anyTabConfigured = Object.values(CONFIG.TABS).some(tabConfigured);
+    const notConfigured = !CONFIG.SHEET_ID || CONFIG.SHEET_ID.indexOf("DAN_SHEET_ID")===0 || !anyTabConfigured;
     const tabResults = { Lop:lop, LopLink:lopLink, TKB:tkb, TroGiang:troGiang, Video:video, TaiLieu:taiLieu, HoTro:hoTro };
     const failedTabs = Object.keys(tabResults).filter(k=>!tabResults[k].ok);
 
     if(notConfigured){
       syncDot.classList.remove('err');
-      syncText.textContent = "Đang hiển thị dữ liệu mẫu — điền Sheet ID trong index.html để dùng dữ liệu thật";
+      syncText.textContent = "Đang hiển thị dữ liệu mẫu — điền Sheet ID và GID từng tab trong index.html để dùng dữ liệu thật";
     }else if(failedTabs.length===0){
       syncDot.classList.remove('err');
       syncText.textContent = "Đã đồng bộ dữ liệu từ Google Sheet";
